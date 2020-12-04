@@ -118,7 +118,13 @@ private:
    * Handle arp packet
    */
   void
-  handlArpPacket(uint8_t *data, const Interface *inIface, uint8_t *smac);
+  handleArpPacket(Buffer &packet, const Interface *inIface);
+
+  /**
+   * Handle ip packet
+   */
+  void
+  handleIpPacket(Buffer &packet, const Interface *inIface);
 };
 
 inline const RoutingTable&
