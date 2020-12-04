@@ -137,6 +137,10 @@ enum arp_hrd_fmt {
   arp_hrd_ethernet = 0x0001,
 };
 
+enum arp_pro_fmt {
+  arp_pro_ip = 0x0800,
+};
+
 
 struct arp_hdr
 {

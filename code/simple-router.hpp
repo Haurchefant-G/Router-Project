@@ -113,6 +113,12 @@ private:
 
   friend class Router;
   pox::PacketInjectorPrx m_pox;
+
+  /**
+   * Handle arp packet
+   */
+  void
+  handlArpPacket(uint8_t *data, const Interface *inIface, uint8_t *smac);
 };
 
 inline const RoutingTable&

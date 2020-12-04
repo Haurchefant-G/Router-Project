@@ -39,7 +39,141 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   // FILL THIS IN
 
+  if (packet.size() < sizeof(ethernet_hdr))
+  {
+    std::cerr << "Received packet, but packet size is too small, ignoring" << std::endl;
+    return;
+  }
+
+  /* Parse the ethernet header */
+
+  void *packet_ptr = packet.data();
+  ethernet_hdr *eth_hdr = (ethernet_hdr *)packet_ptr;
+
+  uint8_t *mac = eth_hdr->ether_dhost;
+  bool valid = true;
+  for (int i = 0; i < ETHER_ADDR_LEN; i++)
+  {
+    if (mac[i] != 0xFFU)
+    {
+      valid = false;
+      break;
+    }
+  }
+
+  if (!valid)
+  {
+    valid = (memcmp(mac, iface->addr.data(), ETHER_ADDR_LEN) == 0);
+  }
+
+  if (!valid)
+  {
+    std::cerr << "Received packet, but the Ethernet frame isn't destined to router, ignoring" << std::endl;
+    return;
+  }
+
+  /* Handle the ethernet packet based on its type */
+
+  if (ntohs(eth_hdr->ether_type) == ethertype_arp)
+  {
+    handle_arp_packet(packet_ptr + sizeof(ethernet_hdr), iface, eth_hdr->ether_shost);
+  }
+  else if (ntohs(eth_hdr->ether_type) == ethertype_ip)
+  {
+    handle_ip_packet(packet, iface, eth_hdr->ether_shost);
+  }
+  else
+  {
+    std::cerr << "Received packet, but type is unknown, ignoring" << std::endl;
+    return;
+  }
 }
+
+void SimpleRouter::handleArpPacket(uint8_t* data, const Interface* inIface, uint8_t* smac)
+{
+  arp_hdr* arp_header = (arp_hdr *) data; 
+
+  // don't handle non-ethernet requests. 
+  if (ntohs(arp_header->arp_hrd) != arp_hrd_ethernet || ntohs(arp_header->arp_pro) != arp_pro_ip) 
+     return; 
+
+  uint16_t arp_op_type = ntohs(arp_header->arp_op); 
+
+  if (arp_op_type == arp_op_request) { 
+
+    /* Handle ARP requests */
+
+    // if the arp request isn't for the router, we can exit. 
+    if (arp_header->arp_tip != inIface->ip)
+       return; 
+
+    // prepare an output buffer for the response. 
+    int out_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr); 
+    uint8_t buf[out_buf_size]; 
+
+    // copy in the ethernet header fields. 
+    ethernet_hdr *eth_h = (ethernet_hdr *) buf; 
+    eth_h->ether_type = htons(ethertype_arp); 
+    memcpy(eth_h->ether_dhost, smac, ETHER_ADDR_LEN); 
+    memcpy(eth_h->ether_shost, inIface->addr.data(), ETHER_ADDR_LEN); 
+
+    // copy in the ARP header information. 
+    arp_hdr *arp_h = (arp_hdr *) (buf + sizeof(ethernet_hdr));
+    arp_h->arp_hrd = htons(arp_hrd_fmt);
+    arp_h->arp_pro = htons(arp_pro_fmt);
+    arp_h->arp_hln = htons(ETHER_ADDR_LEN);
+    arp_h->arp_pln = htons(0x04);
+
+    //memcpy(arp_h, arp_header, sizeof(arp_hdr)); // copy in all fields
+    arp_h->arp_op = htons(arp_op_reply);
+    arp_h->arp_sip = inIface->ip; 
+    memcpy(arp_h->arp_sha, inIface->addr.data(), ETHER_ADDR_LEN);
+    arp_h->arp_tip = arp_header->arp_sip;
+    memcpy(arp_h->arp_tha, arp_header->arp_sha, ETHER_ADDR_LEN);
+
+    // send the packet
+    Buffer reply(buf, buf + out_buf_size); 
+    sendPacket(reply, inIface->name); 
+    return; 
+
+  } 
+  else if (arp_op_type == arp_op_reply) 
+  { 
+
+    /* Handle ARP replies */
+
+    // extract information from the ARP header.
+    uint32_t sip = arp_header->arp_sip;
+
+    Buffer smac;
+    for (int i = 0; i < ETHER_ADDR_LEN; i++)
+      smac.push_back(arp_header->arp_sha[i]);
+
+    std::shared_ptr<ArpRequest> req = m_arp.insertArpEntry(smac, sip);
+
+    if (req != nullptr)
+    {
+      ethernet_hdr *eth_h;
+      for (auto packet : req->packets)
+      {
+        eth_h = (ethernet_hdr *)packet.packet.data();
+        memcpy(eth_h->ether_dhost, smac.data(), ETHER_ADDR_LEN);
+        sendPacket(packet.packet, packet.iface);
+      }
+
+      m_arp.removeRequest(req);
+    }
+    return;
+    
+  } else { 
+    // don't handle undocumented ARP packet types. 
+    fprintf(stderr, "Received ARP packet, but ARP type is unknown, "
+        "ignoring\n");
+    std::cerr << "Received ARP packet, but ARP type is unknown, ignoring" << std::endl;
+    return; 
+  }
+}
+
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
