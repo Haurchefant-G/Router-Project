@@ -75,6 +75,19 @@ struct icmp_t3_hdr {
   uint8_t data[ICMP_DATA_SIZE];
 } __attribute__ ((packed)) ;
 
+enum icmptype
+{
+  icmptype_echo = 0x08,
+  icmptype_echo_reply = 0x00,
+  icmptype_destination_unreachable = 0x03
+};
+
+enum icmpt3code
+{
+  icmpt3code_host_unreachable = 0x01,
+  icmpt3code_port_unreachable = 0x03
+};
+
 /*
  * Structure of the IP header, naked of options.
  */
@@ -140,7 +153,6 @@ enum arp_hrd_fmt {
 enum arp_pro_fmt {
   arp_pro_ip = 0x0800,
 };
-
 
 struct arp_hdr
 {
