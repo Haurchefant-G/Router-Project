@@ -137,8 +137,8 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
     arp_hdr *arp_h = (arp_hdr *) (buf + sizeof(ethernet_hdr));
     arp_h->arp_hrd = htons(arp_hrd_ethernet);
     arp_h->arp_pro = htons(arp_pro_ip);
-    arp_h->arp_hln = htons(ETHER_ADDR_LEN);
-    arp_h->arp_pln = htons(0x04);
+    arp_h->arp_hln = ETHER_ADDR_LEN;
+    arp_h->arp_pln = 0x04;
     //memcpy(arp_h, arp_header, sizeof(arp_hdr));
     arp_h->arp_op = htons(arp_op_reply);
     arp_h->arp_sip = inIface->ip; 
