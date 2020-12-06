@@ -26,13 +26,102 @@ namespace simple_router {
 
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
+uint8_t mac_broadcast[ETHER_ADDR_LEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
 // IMPLEMENT THIS METHOD
 void
 ArpCache::periodicCheckArpRequestsAndCacheEntries()
 {
 
-  // FILL THIS IN
+  std::lock_guard<std::mutex> lock(m_mutex);
 
+  int out_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr);
+  uint8_t *buf = new uint8_t[out_buf_size];
+
+  ethernet_hdr *eth_h = (ethernet_hdr *)buf;
+  eth_h->ether_type = htons(ethertype_arp);
+  memcpy(eth_h->ether_dhost, mac_broadcast, ETHER_ADDR_LEN);
+  //memcpy(eth_h->ether_shost, iface->addr.data(), ETHER_ADDR_LEN);
+
+  // copy in the ARP header information.
+  arp_hdr *arp_h = (arp_hdr *)(buf + sizeof(ethernet_hdr));
+  arp_h->arp_hrd = htons(arp_hrd_ethernet);
+  arp_h->arp_pro = htons(arp_pro_ip);
+  arp_h->arp_hln = htons(ETHER_ADDR_LEN);
+  arp_h->arp_pln = htons(0x04);
+
+  //memcpy(arp_h, arp_header, sizeof(arp_hdr)); // copy in all fields
+  arp_h->arp_op = htons(arp_op_request);
+  //arp_h->arp_sip = iface->ip;
+  //memcpy(arp_h->arp_sha, iface->addr.data(), ETHER_ADDR_LEN);
+  //arp_h->arp_tip = request->ip;
+  memcpy(arp_h->arp_tha, mac_broadcast, ETHER_ADDR_LEN);
+
+  // send the packet
+  // Buffer arp_request(buf, buf + out_buf_size);
+  // m_router.sendPacket(arp_request, iface->name);
+
+  // FILL THIS IN
+  for (auto it = m_arpRequests.begin(); it != m_arpRequests.end(); )
+  {
+    auto request = *it;
+    if (request->nTimesSent >= MAX_SENT_TIME)
+    {
+      // host unreachable
+
+      it = m_arpRequests.erase(it);
+    } 
+    else 
+    {
+      const Interface *iface = m_router.findIfaceByName(request->packets.front().iface);
+
+      // int out_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr);
+      // uint8_t *buf = new uint8_t[out_buf_size];
+
+      // // copy in the ethernet header fields.
+      // ethernet_hdr *eth_h = (ethernet_hdr *)buf;
+      // eth_h->ether_type = htons(ethertype_arp);
+      // memcpy(eth_h->ether_dhost, mac_broadcast, ETHER_ADDR_LEN);
+      memcpy(eth_h->ether_shost, iface->addr.data(), ETHER_ADDR_LEN);
+
+      // copy in the ARP header information.
+      // arp_hdr *arp_h = (arp_hdr *)(buf + sizeof(ethernet_hdr));
+      // arp_h->arp_hrd = htons(arp_hrd_ethernet);
+      // arp_h->arp_pro = htons(arp_pro_ip);
+      // arp_h->arp_hln = htons(ETHER_ADDR_LEN);
+      // arp_h->arp_pln = htons(0x04);
+
+      //memcpy(arp_h, arp_header, sizeof(arp_hdr)); // copy in all fields
+      // arp_h->arp_op = htons(arp_op_request);
+      arp_h->arp_sip = iface->ip;
+      memcpy(arp_h->arp_sha, iface->addr.data(), ETHER_ADDR_LEN);
+      arp_h->arp_tip = request->ip;
+      // memcpy(arp_h->arp_tha, mac_broadcast, ETHER_ADDR_LEN);
+
+      // send the packet
+      Buffer arp_request(buf, buf + out_buf_size);
+      m_router.sendPacket(arp_request, iface->name);
+      // delete[] buf;
+
+      ++request->nTimesSent;
+      request->timeSent = steady_clock::now();
+      ++it;
+    }
+  }
+  delete[] buf;
+
+  for (auto it = m_cacheEntries.begin(); it != m_cacheEntries.end();)
+  {
+    auto entry = *it;
+    if (!entry->isValid)
+    {
+      it = m_cacheEntries.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
+  }
 }
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////

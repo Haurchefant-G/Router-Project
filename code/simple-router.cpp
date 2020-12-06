@@ -53,42 +53,43 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   ethernet_hdr *eth_hdr = (ethernet_hdr *)packet_ptr;
 
   uint8_t *mac = eth_hdr->ether_dhost;
-  bool valid = true;
-  for (int i = 0; i < ETHER_ADDR_LEN; i++)
+  // check if destination hardware address is the corresponding MAC address of the interface
+  bool valid = (memcmp(mac, iface->addr.data(), ETHER_ADDR_LEN) == 0);
+
+  if (!valid)
   {
-    if (mac[i] != 0xFFU)
+    // check if destination hardware address is a broadcast address
+    for (int i = 0; i < ETHER_ADDR_LEN; i++)
     {
-      valid = false;
-      break;
+      if (mac[i] != 0xFFU)
+      {
+        valid = false;
+        break;
+      }
     }
   }
 
   if (!valid)
   {
-    valid = (memcmp(mac, iface->addr.data(), ETHER_ADDR_LEN) == 0);
-  }
-
-  if (!valid)
-  {
+    // ignore Ethernet frames not destined to the router
     std::cerr << "Received packet, but the Ethernet frame isn't destined to router, ignoring" << std::endl;
     return;
   }
 
-  /* Handle the ethernet packet based on its type */
-
   uint16_t type = ntohs(eth_hdr->ether_type);
   if (type == ethertype_arp)
   {
-    //handle_arp_packet(packet_ptr + sizeof(ethernet_hdr), iface, eth_hdr->ether_shost);
+    // handle Arp Packet
     handleArpPacket(packet_copy, iface);
   }
   else if (type == ethertype_ip)
   {
+    // handle ip Packet
     handleIpPacket(packet_copy, iface);
-    //handle_ip_packet(packet_copy, iface, eth_hdr->ether_shost);
   }
   else
   {
+    // unknown packet type
     std::cerr << "Received packet, but type is unknown, ignoring" << std::endl;
     return;
   }
@@ -99,9 +100,7 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
   ethernet_hdr *eth_header = (eth_header *)packet.data();
   arp_hdr *arp_header = (arp_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
-  uint8_t *smac = eth_header->ether_shost;
-
-  // don't handle non-ethernet requests. 
+  // don't handle non-ethernet request or non-ipv4 request. 
   if (ntohs(arp_header->arp_hrd) != arp_hrd_ethernet || ntohs(arp_header->arp_pro) != arp_pro_ip) 
      return; 
 
@@ -109,37 +108,35 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 
   if (arpOp == arp_op_request) { 
 
-    /* Handle ARP requests */
+    // handle ARP request
 
-    // if the arp request isn't for the router, we can exit. 
     if (arp_header->arp_tip != inIface->ip)
        return; 
 
-    // prepare an output buffer for the response. 
+    // reply buf 
     int out_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr); 
     uint8_t *buf = new uint8_t[out_buf_size]; 
 
-    // copy in the ethernet header fields. 
+    // the ethernet header. 
     ethernet_hdr *eth_h = (ethernet_hdr *) buf; 
-    eth_h->ether_type = htons(ethertype_arp); 
-    memcpy(eth_h->ether_dhost, smac, ETHER_ADDR_LEN); 
+    eth_h->ether_type = htons(ethertype_arp);
+    memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
     memcpy(eth_h->ether_shost, inIface->addr.data(), ETHER_ADDR_LEN); 
 
-    // copy in the ARP header information. 
+    // the ARP header. 
     arp_hdr *arp_h = (arp_hdr *) (buf + sizeof(ethernet_hdr));
-    arp_h->arp_hrd = htons(arp_hrd_fmt);
-    arp_h->arp_pro = htons(arp_pro_fmt);
+    arp_h->arp_hrd = htons(arp_hrd_ethernet);
+    arp_h->arp_pro = htons(arp_pro_ip);
     arp_h->arp_hln = htons(ETHER_ADDR_LEN);
     arp_h->arp_pln = htons(0x04);
-
-    //memcpy(arp_h, arp_header, sizeof(arp_hdr)); // copy in all fields
+    //memcpy(arp_h, arp_header, sizeof(arp_hdr));
     arp_h->arp_op = htons(arp_op_reply);
     arp_h->arp_sip = inIface->ip; 
     memcpy(arp_h->arp_sha, inIface->addr.data(), ETHER_ADDR_LEN);
     arp_h->arp_tip = arp_header->arp_sip;
     memcpy(arp_h->arp_tha, arp_header->arp_sha, ETHER_ADDR_LEN);
 
-    // send the packet
+    // send the reply packet.
     Buffer reply(buf, buf + out_buf_size); 
     sendPacket(reply, inIface->name);
     delete[] buf;
@@ -148,33 +145,34 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
   else if (arpOp == arp_op_reply) 
   { 
 
-    /* Handle ARP replies */
+    // andle ARP reply
 
-    // extract information from the ARP header.
+    // reply ip.
     uint32_t sip = arp_header->arp_sip;
 
     Buffer smacbuf;
     for (int i = 0; i < ETHER_ADDR_LEN; i++)
       smacbuf.push_back(arp_header->arp_sha[i]);
 
+    // add to ARP cache
     std::shared_ptr<ArpRequest> req = m_arp.insertArpEntry(smacbuf, sip);
 
+    // handle pending packet
     if (req != nullptr)
     {
       ethernet_hdr *eth_h;
       for (auto p : req->packets)
       {
         eth_h = (ethernet_hdr *)p.packet.data();
-        memcpy(eth_h->ether_dhost, smac, ETHER_ADDR_LEN);
+        memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
         sendPacket(p.packet, p.iface);
       }
-
       m_arp.removeRequest(req);
     }
     return;
 
   } else { 
-    // don't handle undocumented ARP packet types. 
+    // unknown ARP type. 
     std::cerr << "Received ARP packet, but ARP type is unknown, ignoring" << std::endl;
     return; 
   }
@@ -185,6 +183,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   ethernet_hdr *eth_header = (eth_header *)packet.data();
   ip_hdr *ip_header = (ip_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
+  // verify the minimum length
   if (packet.size < sizeof(ethernet_hdr) + sizeof(ip_hdr))
   {
     std::cerr << "Received IP packet, but packet size is too small, ignoring" << std::endl;
@@ -205,17 +204,20 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
 
   if (m_arp.lookup(ip_header->ip_src) == nullptr)
   {
+    // update ARP cache
     Buffer smacbuf(smac, smac + ETHER_ADDR_LEN);
     m_arp.insertArpEntry(smacbuf, ip_header->ip_src);
   }
 
   if (ip_header->ip_ttl <= 1)
   {
+    // time exceeded
 
   }
 
   if (findIfaceByIp(ip_header->ip_dst) == nullptr)
   {
+    // packet is not for the router's interfaces
     RoutingTableEntry entry;
     try
     {
@@ -234,6 +236,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       return;
     }
 
+    // modify the packet to forward it
     Buffer forward(packet);
     ethernet_hdr *eth_h = (eth_header *)forward.data();
     ip_hdr *ip_h = (ip_hdr *)(forward.data() + sizeof(ethernet_hdr));
@@ -258,7 +261,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   }
   else
   {
-    
+    // packet is for the router's interfaces
     if (ip_header->ip_p != ip_protocol_icmp)
     {
       //
