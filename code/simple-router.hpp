@@ -125,6 +125,9 @@ private:
    */
   void
   handleIpPacket(Buffer &packet, const Interface *inIface);
+
+  void
+  sendTimeExceeded(Buffer &packet, const Interface *inIface);
 };
 
 inline const RoutingTable&

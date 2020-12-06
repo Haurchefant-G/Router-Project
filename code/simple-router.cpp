@@ -227,50 +227,18 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   //   m_arp.insertArpEntry(smacbuf, ip_header->ip_src);
   // }
   std::cerr << "4" << std::endl;
-  if (ip_header->ip_ttl <= 1)
-  {
-    // time exceeded
-    int out_buf_size = sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t11_hdr);
-    uint8_t *buf = new uint8_t[out_buf_size];
-    memcpy(buf, packet.data(), sizeof(ethernet_hdr) + sizeof(ip_hdr));
-
-    // the ethernet header.
-    ethernet_hdr *eth_h = (ethernet_hdr *)buf;
-    memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
-    memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
-
-    // the IP header.
-    ip_hdr *ip_h = (ip_hdr *)(buf + sizeof(ethernet_hdr));
-    ip_h->ip_dst = ip_header->ip_src;
-    ip_h->ip_src = inIface->ip;
-    ip_h->ip_p = ip_protocol_icmp;
-    ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t11_hdr));
-    ip_h->ip_ttl = 64;
-    ip_h->ip_sum = 0;
-    ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
-
-    // the icmp type 3 header
-    icmp_t11_hdr *icmp_t11_h = (icmp_t11_hdr *)(buf + sizeof(ethernet_hdr) + sizeof(ip_hdr));
-    icmp_t11_h->icmp_type = icmptype_time_exceeded;
-    icmp_t11_h->icmp_code = 0;
-    icmp_t11_h->unused = 0;
-    memcpy(icmp_t11_h->data, ip_header, ICMP_DATA_SIZE);
-    icmp_t11_h->icmp_sum = 0;
-    icmp_t11_h->icmp_sum = cksum(icmp_t11_h, sizeof(icmp_t11_hdr));
-
-    // send the packet
-    Buffer reply(buf, buf + out_buf_size);
-    sendPacket(reply, inIface->name);
-    delete[] buf;
-    std::cerr << "Received ip packet, time exceeded" << std::endl;
-    return;
-  }
   std::cerr << "5" << std::endl;
 
   if (findIfaceByIp(ip_header->ip_dst) == nullptr)
   {
     // packet is not for the router's interfaces
     //std::cerr << "packet is not for the router's interfaces" << std::endl;
+    if (ip_header->ip_ttl <= 1)
+    {
+      // time exceeded
+      sendTimeExceeded(packet, inIface);
+      return;
+    }
 
     RoutingTableEntry entry;
     try
@@ -325,6 +293,13 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   else
   {
     // packet is for the router's interfaces
+    if (ip_header->ip_ttl < 1)
+    {
+      // time exceeded
+      sendTimeExceeded(packet, inIface);
+      return;
+    }
+
     std::cerr << "packet is for the router's interfaces" << std::endl;
     if ((ip_header->ip_p == ip_protocol_tcp) || (ip_header->ip_p == ip_protocol_udp))
     {
@@ -418,6 +393,47 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   }
   std::cerr << "6" << std::endl;
   std::cerr << "ip packet handle error" << std::endl;
+}
+
+void SimpleRouter::sendTimeExceeded(Buffer &packet, const Interface *inIface)
+{
+  ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
+  ip_hdr *ip_header = (ip_hdr *)(packet.data() + sizeof(ethernet_hdr));
+
+  int out_buf_size = sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t11_hdr);
+  uint8_t *buf = new uint8_t[out_buf_size];
+  memcpy(buf, packet.data(), sizeof(ethernet_hdr) + sizeof(ip_hdr));
+
+  // the ethernet header.
+  ethernet_hdr *eth_h = (ethernet_hdr *)buf;
+  memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
+  memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
+
+  // the IP header.
+  ip_hdr *ip_h = (ip_hdr *)(buf + sizeof(ethernet_hdr));
+  ip_h->ip_dst = ip_header->ip_src;
+  ip_h->ip_src = inIface->ip;
+  ip_h->ip_p = ip_protocol_icmp;
+  ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t11_hdr));
+  ip_h->ip_ttl = 64;
+  ip_h->ip_sum = 0;
+  ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
+
+  // the icmp type 3 header
+  icmp_t11_hdr *icmp_t11_h = (icmp_t11_hdr *)(buf + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+  icmp_t11_h->icmp_type = icmptype_time_exceeded;
+  icmp_t11_h->icmp_code = 0;
+  icmp_t11_h->unused = 0;
+  memcpy(icmp_t11_h->data, ip_header, ICMP_DATA_SIZE);
+  icmp_t11_h->icmp_sum = 0;
+  icmp_t11_h->icmp_sum = cksum(icmp_t11_h, sizeof(icmp_t11_hdr));
+
+  // send the packet
+  Buffer reply(buf, buf + out_buf_size);
+  sendPacket(reply, inIface->name);
+  delete[] buf;
+  std::cerr << "Received ip packet, time exceeded" << std::endl;
+  return;
 }
 
 //////////////////////////////////////////////////////////////////////////
