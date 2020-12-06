@@ -211,6 +211,9 @@ private:
 
   friend std::ostream&
   operator<<(std::ostream& os, const ArpCache& cache);
+
+public:
+  void sendHostUnreachable(Buffer &packet);
 };
 
 std::ostream&

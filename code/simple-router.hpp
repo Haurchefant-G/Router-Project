@@ -127,7 +127,17 @@ private:
   handleIpPacket(Buffer &packet, const Interface *inIface);
 
   void
-  sendTimeExceeded(Buffer &packet, const Interface *inIface);
+  sendTimeExceeded(Buffer &packet, const Interface *iface);
+
+  void 
+  sendForwardPacket(Buffer &packet);
+
+public:
+  void
+  sendPortUnreachable(Buffer &packet, const Interface *iface);
+
+  const Interface*
+  lookupIfaceInRoutingtable(uint32_t ip);
 };
 
 inline const RoutingTable&
