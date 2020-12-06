@@ -97,7 +97,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
 void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 {
-  ethernet_hdr *eth_header = (eth_header *)packet.data();
+  ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   arp_hdr *arp_header = (arp_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
   // don't handle non-ethernet request or non-ipv4 request. 
@@ -180,11 +180,11 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 
 void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
 {
-  ethernet_hdr *eth_header = (eth_header *)packet.data();
+  ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   ip_hdr *ip_header = (ip_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
   // verify the minimum length
-  if (packet.size < sizeof(ethernet_hdr) + sizeof(ip_hdr))
+  if (packet.size() < sizeof(ethernet_hdr) + sizeof(ip_hdr))
   {
     std::cerr << "Received IP packet, but packet size is too small, ignoring" << std::endl;
     return;
@@ -192,9 +192,9 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
 
 
   // check packet checksum
-  uint16_t checksum = ip_header->ip_sum;
+  uint16_t sum = ip_header->ip_sum;
   ip_header->ip_sum = 0;
-  if (cksum(ip_header, sizeof(ip_hdr)) != ip_header->ip_sum)
+  if (cksum(ip_header, sizeof(ip_hdr)) != sum)
   {
     std::cerr << "Received IP packet, but checksum is wrong, ignoring" << std::endl;
     return;
@@ -222,12 +222,12 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
 
     // the IP header.
-    ip_hdr *ip_h = (ip_hdr *)(packet_ptr + sizeof(ethernet_hdr));
+    ip_hdr *ip_h = (ip_hdr *)(buf + sizeof(ethernet_hdr));
     ip_h->ip_dst = ip_header->ip_src;
     ip_h->ip_src = ip_header->ip_dst;
     ip_h->ip_p = ip_protocol_icmp;
     ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t11_hdr));
-    ip_h->ip_ttl = 256;
+    ip_h->ip_ttl = 128;
     ip_h->ip_sum = 0;
     ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
 
@@ -237,8 +237,8 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     icmp_t11_h->icmp_code = 0;
     icmp_t11_h->unused = 0;
     memcpy(icmp_t11_h->data, ip_header, ICMP_DATA_SIZE);
-    icmp_h->icmp_sum = 0;
-    icmp_h->icmp_sum = cksum(icmp_h, sizeof(icmp_t11_hdr));
+    icmp_t11_h->icmp_sum = 0;
+    icmp_t11_h->icmp_sum = cksum(icmp_h, sizeof(icmp_t11_hdr));
 
     // send the packet
     Buffer reply(buf, buf + out_buf_size);
@@ -270,7 +270,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
 
     // modify the packet to forward it
     Buffer forward(packet);
-    ethernet_hdr *eth_h = (eth_header *)forward.data();
+    ethernet_hdr *eth_h = (ethernet_hdr *)forward.data();
     memcpy(eth_h->ether_shost, iface->addr.data(), ETHER_ADDR_LEN);
 
     ip_hdr *ip_h = (ip_hdr *)(forward.data() + sizeof(ethernet_hdr));
@@ -282,7 +282,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     if (arpentry == nullptr)
     {
       // the target MAC address is not in ARP cache, pend the packet
-      m_arp.queueRequest(ip_h->ip_dst, forward, iface);
+      m_arp.queueRequest(ip_h->ip_dst, forward, iface->name);
       return;
     }
     else
@@ -310,12 +310,12 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
 
       // the IP header.
-      ip_hdr *ip_h = (ip_hdr *)(packet_ptr + sizeof(ethernet_hdr));
+      ip_hdr *ip_h = (ip_hdr *)(buf+ sizeof(ethernet_hdr));
       ip_h->ip_dst = ip_header->ip_src;
       ip_h->ip_src = ip_header->ip_dst;
       ip_h->ip_p = ip_protocol_icmp;
       ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr));
-      ip_h->ip_ttl = 256;
+      ip_h->ip_ttl = 128;
       ip_h->ip_sum = 0;
       ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
 
@@ -335,7 +335,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       delete[] buf;
       return;
     }
-    elif (ip_header->ip_p == ip_protocol_icmp)
+    else if (ip_header->ip_p == ip_protocol_icmp)
     {
       //
       icmp_hdr *icmp_header = (icmp_hdr *)(packet.data() + sizeof(ethernet_hdr) + sizeof(ip_hdr));
@@ -357,7 +357,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
         ip_h->ip_src = ip_header->ip_dst;
         ip_h->ip_p = ip_protocol_icmp;
         ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t0_hdr));
-        ip_h->ip_ttl = 256;
+        ip_h->ip_ttl = 128;
         ip_h->ip_sum = 0;
         ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
 
