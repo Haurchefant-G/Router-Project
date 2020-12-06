@@ -59,6 +59,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
   if (!valid)
   {
     // check if destination hardware address is a broadcast address
+    valid = true;
     for (int i = 0; i < ETHER_ADDR_LEN; i++)
     {
       if (mac[i] != 0xFFU)
