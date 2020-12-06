@@ -212,7 +212,39 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   if (ip_header->ip_ttl <= 1)
   {
     // time exceeded
+    int out_buf_size = sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t11_hdr);
+    uint8_t *buf = new uint8_t[out_buf_size];
+    memcpy(buf, packet.data(), sizeof(ethernet_hdr) + sizeof(ip_hdr));
 
+    // the ethernet header.
+    ethernet_hdr *eth_h = (ethernet_hdr *)buf;
+    memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
+    memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
+
+    // the IP header.
+    ip_hdr *ip_h = (ip_hdr *)(packet_ptr + sizeof(ethernet_hdr));
+    ip_h->ip_dst = ip_header->ip_src;
+    ip_h->ip_src = ip_header->ip_dst;
+    ip_h->ip_p = ip_protocol_icmp;
+    ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t11_hdr));
+    ip_h->ip_ttl = 256;
+    ip_h->ip_sum = 0;
+    ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
+
+    // the icmp type 3 header
+    icmp_t11_hdr *icmp_t11_h = (icmp_t11_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+    icmp_t11_h->icmp_type = icmptype_time_exceeded;
+    icmp_t11_h->icmp_code = 0;
+    icmp_t11_h->unused = 0;
+    memcpy(icmp_t11_h->data, ip_header, ICMP_DATA_SIZE);
+    icmp_h->icmp_sum = 0;
+    icmp_h->icmp_sum = cksum(icmp_h, sizeof(icmp_t11_hdr));
+
+    // send the packet
+    Buffer reply(buf, buf + out_buf_size);
+    sendPacket(reply, inIface->name);
+    delete[] buf;
+    return;
   }
 
   if (findIfaceByIp(ip_header->ip_dst) == nullptr)
@@ -239,9 +271,9 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     // modify the packet to forward it
     Buffer forward(packet);
     ethernet_hdr *eth_h = (eth_header *)forward.data();
-    ip_hdr *ip_h = (ip_hdr *)(forward.data() + sizeof(ethernet_hdr));
-
     memcpy(eth_h->ether_shost, iface->addr.data(), ETHER_ADDR_LEN);
+
+    ip_hdr *ip_h = (ip_hdr *)(forward.data() + sizeof(ethernet_hdr));
     --ip_h->ip_ttl;
     ip_h->ip_sum = 0;
     ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
@@ -249,11 +281,13 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     std::shared_ptr<ArpEntry> arpentry = m_arp.lookup(ip_h->ip_dst);
     if (arpentry == nullptr)
     {
+      // the target MAC address is not in ARP cache, pend the packet
       m_arp.queueRequest(ip_h->ip_dst, forward, iface);
       return;
     }
     else
     {
+      // the target MAC address is in ARP cache
       memcpy(eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN);
       sendPacket(forward, iface->name);
       return;
@@ -262,19 +296,20 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   else
   {
     // packet is for the router's interfaces
-    if (ip_header->ip_p != ip_protocol_icmp)
+    if (ip_header->ip_p == ip_protocol_tcp || ip_header->ip_p == ip_protocol_udp)
     {
-      //
+      // an IP packet containing a UDP or TCP payload is sent to one of the router’s interfaces
+      // port unreachable
       int out_buf_size = sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t3_hdr);
       uint8_t *buf = new uint8_t[out_buf_size];
-
       memcpy(buf, packet.data(), sizeof(ethernet_hdr) + sizeof(ip_hdr));
 
-      // copy in the ethernet header fields.
+      // the ethernet header.
       ethernet_hdr *eth_h = (ethernet_hdr *)buf;
       memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
       memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
 
+      // the IP header.
       ip_hdr *ip_h = (ip_hdr *)(packet_ptr + sizeof(ethernet_hdr));
       ip_h->ip_dst = ip_header->ip_src;
       ip_h->ip_src = ip_header->ip_dst;
@@ -284,50 +319,68 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       ip_h->ip_sum = 0;
       ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
 
+      // the icmp type 3 header
       icmp_t3_hdr *icmp_t3_h = (icmp_t3_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
       icmp_t3_h->icmp_type = icmptype_destination_unreachable;
       icmp_t3_h->icmp_code = icmpt3code_port_unreachable;
       icmp_t3_h->unused = 0;
       icmp_t3_h->next_mtu = 0;
       memcpy(icmp_t3_h->data, ip_header, ICMP_DATA_SIZE);
-      icmp_h->icmp_sum = 0;
-      icmp_h->icmp_sum = cksum(icmp_h, sizeof(icmp_hdr));
+      icmp_t3_h->icmp_sum = 0;
+      icmp_t3_h->icmp_sum = cksum(icmp_t3_h, sizeof(icmp_t3_hdr));
+
       // send the packet
       Buffer reply(buf, buf + out_buf_size);
       sendPacket(reply, inIface->name);
       delete[] buf;
-      return
-    }
-    icmp_hdr *icmp_header = (icmp_hdr *)(packet.data() + sizeof(ethernet_hdr) + sizeof(ip_hdr));
-
-    if (icmp_header->icmp_type == icmptype_echo)
-    {
-      Buffer packet_copy(packet);
-      void *packet_ptr = packet_copy.data();
-
-      ethernet_hdr *eth_h = (ethernet_hdr *)packet_ptr;
-      memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
-      memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
-
-      ip_hdr *ip_h = (ip_hdr *)(packet_ptr + sizeof(ethernet_hdr));
-      ip_h->ip_dst = ip_header->ip_src;
-      ip_h->ip_src = ip_header->ip_dst;
-      ip_h->ip_ttl = 256;
-      ip_h->ip_sum = 0;
-      ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
-
-      icmp_hdr *icmp_h = (icmp_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
-      icmp_h->icmp_type = icmptype_echo_reply;
-      icmp_h->icmp_code = 0;
-      icmp_h->icmp_sum = cksum(icmp_h, sizeof(icmp_hdr));
-
-      Buffer reply(packet_ptr, packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_hdr));
-      sendPacket(reply, inIface->name);
       return;
+    }
+    elif (ip_header->ip_p == ip_protocol_icmp)
+    {
+      //
+      icmp_hdr *icmp_header = (icmp_hdr *)(packet.data() + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+
+      if (icmp_header->icmp_type == icmptype_echo)
+      {
+        // icmp Echo
+        Buffer packet_copy(packet);
+        void *packet_ptr = packet_copy.data();
+
+        // the ethernet header.
+        ethernet_hdr *eth_h = (ethernet_hdr *)packet_ptr;
+        memcpy(eth_h->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
+        memcpy(eth_h->ether_shost, eth_header->ether_dhost, ETHER_ADDR_LEN);
+
+        // the IP header.
+        ip_hdr *ip_h = (ip_hdr *)(packet_ptr + sizeof(ethernet_hdr));
+        ip_h->ip_dst = ip_header->ip_src;
+        ip_h->ip_src = ip_header->ip_dst;
+        ip_h->ip_p = ip_protocol_icmp;
+        ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t0_hdr));
+        ip_h->ip_ttl = 256;
+        ip_h->ip_sum = 0;
+        ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
+
+        icmp_t0_hdr *icmp_t0_h = (icmp_t0_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+        icmp_t0_h->icmp_type = icmptype_echo_reply;
+        icmp_t0_h->icmp_code = 0;
+        icmp_t0_h->icmp_sum = cksum(icmp_t0_h, sizeof(icmp_t0_hdr));
+
+        Buffer reply(packet_ptr, packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t0_hdr));
+        sendPacket(reply, inIface->name);
+        return;
+      }
+      else
+      {
+        /* code */
+        std::cerr << "Received Echo packet, but type is unsupported, ignoring" << std::endl;
+        return;
+      }
     }
     else
     {
-      /* code */
+      std::cerr << "Received IP packet, but protocol is unsupported, ignoring" << std::endl;
+      return;
     }
     
   }

@@ -63,6 +63,16 @@ struct icmp_hdr {
   uint16_t icmp_sum;
 } __attribute__ ((packed)) ;
 
+/* Structure of a type0 ICMP header
+ */
+struct icmp_t0_hdr
+{
+  uint8_t icmp_type;
+  uint8_t icmp_code;
+  uint16_t icmp_sum;
+  uint16_t icmp_id;
+  uint16_t icmp_sequence;
+} __attribute__((packed));
 
 /* Structure of a type3 ICMP header
  */
@@ -75,10 +85,22 @@ struct icmp_t3_hdr {
   uint8_t data[ICMP_DATA_SIZE];
 } __attribute__ ((packed)) ;
 
+/* Structure of a type11 ICMP header
+ */
+struct icmp_t11_hdr
+{
+  uint8_t icmp_type;
+  uint8_t icmp_code;
+  uint16_t icmp_sum;
+  uint32_t unused;
+  uint8_t data[ICMP_DATA_SIZE];
+} __attribute__((packed));
+
 enum icmptype
 {
   icmptype_echo = 0x08,
   icmptype_echo_reply = 0x00,
+  icmptype_time_exceeded = 0x0B,
   icmptype_destination_unreachable = 0x03
 };
 
@@ -134,6 +156,8 @@ struct ethernet_hdr
 
 enum ip_protocol {
   ip_protocol_icmp = 0x0001,
+  ip_protocol_tcp = 0x0006,
+  ip_protocol_udp = 0x0011
 };
 
 enum ethertype {
