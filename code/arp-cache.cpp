@@ -33,8 +33,6 @@ void
 ArpCache::periodicCheckArpRequestsAndCacheEntries()
 {
 
-  std::lock_guard<std::mutex> lock(m_mutex);
-
   int out_buf_size = sizeof(ethernet_hdr) + sizeof(arp_hdr);
   uint8_t *buf = new uint8_t[out_buf_size];
 
@@ -144,6 +142,7 @@ ArpCache::~ArpCache()
 std::shared_ptr<ArpEntry>
 ArpCache::lookup(uint32_t ip)
 {
+  
   std::lock_guard<std::mutex> lock(m_mutex);
 
   for (const auto& entry : m_cacheEntries) {

@@ -72,6 +72,7 @@ struct icmp_t0_hdr
   uint16_t icmp_sum;
   uint16_t icmp_id;
   uint16_t icmp_sequence;
+  uint8_t data[56];
 } __attribute__((packed));
 
 /* Structure of a type3 ICMP header

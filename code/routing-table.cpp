@@ -22,6 +22,8 @@
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
+#include <cstdlib>
+#include <iostream>
 
 namespace simple_router {
 
@@ -35,6 +37,7 @@ RoutingTable::lookup(uint32_t ip) const
   // FILL THIS IN
   bool found = false;
   RoutingTableEntry entry;
+  std::cerr << *this << std::endl << std::endl;
   for (auto it = m_entries.begin(); it != m_entries.end(); ++it)
   {
     if ((ip & it->mask) == (it->dest & it->mask))
@@ -53,6 +56,7 @@ RoutingTable::lookup(uint32_t ip) const
 
   if (found)
   {
+    std::cerr << "entry:" << entry << std::endl;
     return entry;
   }
   throw std::runtime_error("Routing entry not found");
