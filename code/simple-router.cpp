@@ -407,7 +407,7 @@ void SimpleRouter::sendTimeExceeded(Buffer &packet, const Interface *iface)
 void SimpleRouter::sendForwardPacket(Buffer &packet)
 {
   
-  ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
+  //ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   ip_hdr *ip_header = (ip_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
   const Interface * iface = lookupIfaceInRoutingtable(ip_header->ip_dst);
@@ -513,13 +513,13 @@ SimpleRouter::lookupIfaceInRoutingtable(uint32_t ip)
   RoutingTableEntry entry;
   try
   {
-    entry = m_routingTable.lookup(ip_header->ip_dst);
+    entry = m_routingTable.lookup(ip);
   }
   catch (const std::runtime_error &e)
   {
     std::cerr << e.what() << '\n';
     std::cerr << "look up error" << std::endl;
-    return;
+    return nullptr;
   }
 
   const Interface *iface = findIfaceByName(entry.ifName);
@@ -527,8 +527,8 @@ SimpleRouter::lookupIfaceInRoutingtable(uint32_t ip)
   {
     std::cerr << "Received IP packet, but unknown interface is in routing table,"
               << entry << "  ignoring" << std::endl;
-    return;
   }
+  return iface
 }
 
 //////////////////////////////////////////////////////////////////////////
