@@ -100,6 +100,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
 void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 {
+  print_hdrs(packet);
   ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   arp_hdr *arp_header = (arp_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
@@ -148,6 +149,7 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
     // send the reply packet.
     Buffer reply(buf, buf + out_buf_size); 
     sendPacket(reply, inIface->name);
+    print_hdrs(reply);
     delete[] buf;
     std::cerr << "Received ARP request packet, reply" << std::endl;
     return;
@@ -191,6 +193,7 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 
 void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
 {
+  print_hdrs(packet);
   ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   ip_hdr *ip_header = (ip_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
