@@ -49,7 +49,7 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
   Buffer packet_copy(packet);
 
-  void *packet_ptr = packet_copy.data();
+  uint8_t *packet_ptr = packet_copy.data();
   ethernet_hdr *eth_hdr = (ethernet_hdr *)packet_ptr;
 
   uint8_t *mac = eth_hdr->ether_dhost;
@@ -229,10 +229,10 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t11_hdr));
     ip_h->ip_ttl = 128;
     ip_h->ip_sum = 0;
-    ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
+    ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
 
     // the icmp type 3 header
-    icmp_t11_hdr *icmp_t11_h = (icmp_t11_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+    icmp_t11_hdr *icmp_t11_h = (icmp_t11_hdr *)(buf + sizeof(ethernet_hdr) + sizeof(ip_hdr));
     icmp_t11_h->icmp_type = icmptype_time_exceeded;
     icmp_t11_h->icmp_code = 0;
     icmp_t11_h->unused = 0;
@@ -276,7 +276,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     ip_hdr *ip_h = (ip_hdr *)(forward.data() + sizeof(ethernet_hdr));
     --ip_h->ip_ttl;
     ip_h->ip_sum = 0;
-    ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
+    ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
 
     std::shared_ptr<ArpEntry> arpentry = m_arp.lookup(ip_h->ip_dst);
     if (arpentry == nullptr)
@@ -317,10 +317,10 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t3_hdr));
       ip_h->ip_ttl = 128;
       ip_h->ip_sum = 0;
-      ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
+      ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
 
       // the icmp type 3 header
-      icmp_t3_hdr *icmp_t3_h = (icmp_t3_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
+      icmp_t3_hdr *icmp_t3_h = (icmp_t3_hdr *)(buf + sizeof(ethernet_hdr) + sizeof(ip_hdr));
       icmp_t3_h->icmp_type = icmptype_destination_unreachable;
       icmp_t3_h->icmp_code = icmpt3code_port_unreachable;
       icmp_t3_h->unused = 0;
@@ -344,7 +344,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       {
         // icmp Echo
         Buffer packet_copy(packet);
-        void *packet_ptr = packet_copy.data();
+        uint8_t *packet_ptr = packet_copy.data();
 
         // the ethernet header.
         ethernet_hdr *eth_h = (ethernet_hdr *)packet_ptr;
@@ -359,7 +359,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
         ip_h->ip_len = htons(sizeof(ip_hdr) + sizeof(icmp_t0_hdr));
         ip_h->ip_ttl = 128;
         ip_h->ip_sum = 0;
-        ip_h->ip_sum = checksum(ip_h, sizeof(ip_hdr));
+        ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
 
         icmp_t0_hdr *icmp_t0_h = (icmp_t0_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
         icmp_t0_h->icmp_type = icmptype_echo_reply;
