@@ -265,6 +265,8 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   if (findIfaceByIp(ip_header->ip_dst) == nullptr)
   {
     // packet is not for the router's interfaces
+    std::cerr << "packet is not for the router's interfaces" << std::endl;
+
     RoutingTableEntry entry;
     try
     {
@@ -273,6 +275,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     catch (const std::runtime_error &e)
     {
       std::cerr << e.what() << '\n';
+      std::cerr << "look up error" << std::endl;
       return;
     }
 
@@ -313,7 +316,8 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   else
   {
     // packet is for the router's interfaces
-    if (ip_header->ip_p == ip_protocol_tcp || ip_header->ip_p == ip_protocol_udp)
+    std::cerr << "packet is for the router's interfaces" << std::endl;
+    if ((ip_header->ip_p == ip_protocol_tcp) || (ip_header->ip_p == ip_protocol_udp))
     {
       // an IP packet containing a UDP or TCP payload is sent to one of the router’s interfaces
       // port unreachable
@@ -403,6 +407,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     }
     
   }
+  std::cerr << "ip packet handle error" << std::endl;
 }
 
 //////////////////////////////////////////////////////////////////////////
