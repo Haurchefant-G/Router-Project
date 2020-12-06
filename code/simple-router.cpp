@@ -238,7 +238,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     icmp_t11_h->unused = 0;
     memcpy(icmp_t11_h->data, ip_header, ICMP_DATA_SIZE);
     icmp_t11_h->icmp_sum = 0;
-    icmp_t11_h->icmp_sum = cksum(icmp_h, sizeof(icmp_t11_hdr));
+    icmp_t11_h->icmp_sum = cksum(icmp_t11_h, sizeof(icmp_t11_hdr));
 
     // send the packet
     Buffer reply(buf, buf + out_buf_size);
