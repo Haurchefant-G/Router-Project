@@ -37,7 +37,6 @@ RoutingTable::lookup(uint32_t ip) const
   // FILL THIS IN
   bool found = false;
   RoutingTableEntry entry;
-  std::cerr << *this << std::endl << std::endl;
   for (auto it = m_entries.begin(); it != m_entries.end(); ++it)
   {
     if ((ip & it->mask) == (it->dest & it->mask))
