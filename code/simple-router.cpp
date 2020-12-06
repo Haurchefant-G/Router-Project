@@ -102,7 +102,6 @@ SimpleRouter::handlePacket(const Buffer& packet, const std::string& inIface)
 
 void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 {
-  print_hdrs(packet);
   ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   arp_hdr *arp_header = (arp_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
@@ -151,7 +150,6 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
     // send the reply packet.
     Buffer reply(buf, buf + out_buf_size); 
     sendPacket(reply, inIface->name);
-    print_hdrs(reply);
     delete[] buf;
     std::cerr << "Received ARP request packet, reply" << std::endl;
     return;
@@ -159,7 +157,7 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
   else if (arpOp == arp_op_reply) 
   { 
 
-    // andle ARP reply
+    // handle ARP reply
 
     // reply ip.
     uint32_t sip = arp_header->arp_sip;
@@ -195,11 +193,9 @@ void SimpleRouter::handleArpPacket(Buffer &packet, const Interface *inIface)
 
 void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
 {
-  print_hdrs(packet);
   ethernet_hdr *eth_header = (ethernet_hdr *)packet.data();
   ip_hdr *ip_header = (ip_hdr *)(packet.data() + sizeof(ethernet_hdr));
 
-  std::cerr << "1" << std::endl;
   // verify the minimum length
   if (packet.size() < sizeof(ethernet_hdr) + sizeof(ip_hdr))
   {
@@ -207,7 +203,6 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     return;
   }
 
-  std::cerr << "2" << std::endl;
   // check packet checksum
   uint16_t sum = ip_header->ip_sum;
   ip_header->ip_sum = 0;
@@ -220,33 +215,12 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
   if (findIfaceByIp(ip_header->ip_dst) == nullptr)
   {
     // packet is not for the router's interfaces
-    //std::cerr << "packet is not for the router's interfaces" << std::endl;
     if (ip_header->ip_ttl <= 1)
     {
       // time exceeded
       sendTimeExceeded(packet, inIface);
       return;
     }
-
-    // RoutingTableEntry entry;
-    // try
-    // {
-    //   entry = m_routingTable.lookup(ip_header->ip_dst);
-    // }
-    // catch (const std::runtime_error &e)
-    // {
-    //   std::cerr << e.what() << '\n';
-    //   std::cerr << "look up error" << std::endl;
-    //   return;
-    // }
-
-    // const Interface *iface = findIfaceByName(entry.ifName);
-    // if (iface == nullptr)
-    // {
-    //   std::cerr << "Received IP packet, but unknown interface is in routing table," 
-    //   << entry <<"  ignoring" << std::endl;
-    //   return;
-    // }
 
     sendForwardPacket(packet);
     return;
@@ -271,7 +245,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
     }
     else if (ip_header->ip_p == ip_protocol_icmp)
     {
-      //send echo reply
+      // send echo reply
       icmp_hdr *icmp_header = (icmp_hdr *)(packet.data() + sizeof(ethernet_hdr) + sizeof(ip_hdr));
 
       if (icmp_header->icmp_type == icmptype_echo)
@@ -295,6 +269,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
         ip_h->ip_sum = 0;
         ip_h->ip_sum = cksum(ip_h, sizeof(ip_hdr));
 
+        // the icmp type0 header
         icmp_t0_hdr *icmp_t0_h = (icmp_t0_hdr *)(packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr));
         icmp_t0_h->icmp_type = icmptype_echo_reply;
         icmp_t0_h->icmp_code = 0;
@@ -318,15 +293,10 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
           std::cerr << "Received IP packet, echo reply" << std::endl;
           return;
         }
-
-        // Buffer reply(packet_ptr, packet_ptr + sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(icmp_t0_hdr));
-        // sendPacket(reply, inIface->name);
-        // std::cerr << "Received IP packet, echo reply" << std::endl;
         return;
       }
       else
       {
-        /* code */
         std::cerr << "Received Echo packet, but type is unsupported, ignoring" << std::endl;
         return;
       }
@@ -336,10 +306,7 @@ void SimpleRouter::handleIpPacket(Buffer &packet, const Interface *inIface)
       std::cerr << "Received IP packet, but protocol is unsupported, ignoring" << std::endl;
       return;
     }
-    
   }
-  std::cerr << "6" << std::endl;
-  std::cerr << "ip packet handle error" << std::endl;
 }
 
 void SimpleRouter::sendTimeExceeded(Buffer &packet, const Interface *iface)
@@ -382,23 +349,16 @@ void SimpleRouter::sendTimeExceeded(Buffer &packet, const Interface *iface)
     // the target MAC address is not in ARP cache, pend the packet
     Buffer reply(buf, buf + out_buf_size);
     m_arp.queueRequest(ip_h->ip_dst, reply, iface->name);
-    //std::cerr << "Received IP packet, packet pended" << std::endl;
     return;
   }
   else
   {
-    std::cerr << "5.2.2" << std::endl;
     // the target MAC address is in ARP cache
     memcpy(eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN);
     Buffer reply(buf, buf + out_buf_size);
     sendPacket(reply, iface->name);
-    std::cerr << "Received IP packet, packet forwarded" << std::endl;
     return;
   }
-
-  // send the packet
-  // Buffer reply(buf, buf + out_buf_size);
-  // sendPacket(reply, iface->name);
   delete[] buf;
   std::cerr << "Received ip packet, time exceeded" << std::endl;
   return;
@@ -415,7 +375,6 @@ void SimpleRouter::sendForwardPacket(Buffer &packet)
 
   if(iface != nullptr)
   {
-    std::cerr << "5.1" << std::endl;
     // modify the packet to forward it
     Buffer forward(packet);
     ethernet_hdr *eth_h = (ethernet_hdr *)forward.data();
@@ -431,19 +390,16 @@ void SimpleRouter::sendForwardPacket(Buffer &packet)
     {
       // the target MAC address is not in ARP cache, pend the packet
       m_arp.queueRequest(ip_h->ip_dst, forward, iface->name);
-      //std::cerr << "Received IP packet, packet pended" << std::endl;
       return;
     }
     else
     {
-      std::cerr << "5.2.2" << std::endl;
       // the target MAC address is in ARP cache
       memcpy(eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN);
       sendPacket(forward, iface->name);
-      std::cerr << "Received IP packet, packet forwarded" << std::endl;
       return;
     }
-    std::cerr << "5.3" << std::endl;
+    std::cerr << "Received IP packet, packet forwarded" << std::endl;
   }
 }
 
@@ -495,13 +451,8 @@ void SimpleRouter::sendPortUnreachable(Buffer &packet, const Interface *iface)
     memcpy(eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN);
     Buffer reply(buf, buf + out_buf_size);
     sendPacket(reply, iface->name);
-    std::cerr << "Received IP packet, packet forwarded" << std::endl;
     return;
   }
-
-  // send the packet
-  // Buffer reply(buf, buf + out_buf_size);
-  // sendPacket(reply, iface->name);
   delete[] buf;
   std::cerr << "Received IP packet, port unreachable" << std::endl;
   return;
@@ -518,7 +469,7 @@ SimpleRouter::lookupIfaceInRoutingtable(uint32_t ip)
   catch (const std::runtime_error &e)
   {
     std::cerr << e.what() << '\n';
-    std::cerr << "look up error" << std::endl;
+    std::cerr << "lookup error" << std::endl;
     return nullptr;
   }
 

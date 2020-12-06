@@ -167,11 +167,11 @@ void ArpCache::sendHostUnreachable(Buffer &packet)
       }
       // Add the packet to the list of packets for this request
       (*request)->packets.push_back({reply, iface->name});
-      //std::cerr << "Received IP packet, packet pended" << std::endl;
       return;
     }
     else
     {
+      // the target MAC address is in ARP cache
       memcpy(eth_h->ether_dhost, arpentry->mac.data(), ETHER_ADDR_LEN);
       Buffer reply(buf, buf + out_buf_size);
       m_router.sendPacket(reply, iface->name);

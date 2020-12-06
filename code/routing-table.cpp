@@ -56,7 +56,6 @@ RoutingTable::lookup(uint32_t ip) const
 
   if (found)
   {
-    std::cerr << "entry:" << entry << std::endl;
     return entry;
   }
   throw std::runtime_error("Routing entry not found");
