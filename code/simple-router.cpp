@@ -479,7 +479,7 @@ SimpleRouter::lookupIfaceInRoutingtable(uint32_t ip)
     std::cerr << "Received IP packet, but unknown interface is in routing table,"
               << entry << "  ignoring" << std::endl;
   }
-  return iface
+  return iface;
 }
 
 //////////////////////////////////////////////////////////////////////////
